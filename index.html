@@ -5,448 +5,357 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>항암치료 건강 체크</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
+        .table-container {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        table {
+            font-size: 0.85rem;
+        }
+        th, td {
+            padding: 0.5rem;
+            border: 1px solid #e5e7eb;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
-    <div id="app" class="max-w-4xl mx-auto p-6 bg-white min-h-screen">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-bold text-blue-600">항암치료 건강 체크</h1>
-            <button onclick="toggleHistory()" id="toggleBtn" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-                기록 보기
-            </button>
-        </div>
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold text-blue-600 mb-6 text-center">항암치료 건강 체크</h1>
 
-        <!-- 경고 메시지 -->
-        <div id="urgentWarning" class="hidden mb-6 p-4 bg-red-50 border-2 border-red-500 rounded-lg">
-            <h3 class="font-bold text-red-700 mb-1">⚠️ 주의 필요</h3>
-            <p class="text-red-600 text-sm">체크된 수치가 위험 범위입니다. 병원에 연락하세요.</p>
-        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 왼쪽: 입력 폼 -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-bold mb-4">새 기록 입력</h2>
 
-        <!-- 히스토리 화면 -->
-        <div id="historyView" class="hidden">
-            <div id="recordsList"></div>
-        </div>
-
-        <!-- 입력 폼 -->
-        <div id="formView">
-            <!-- 날짜 -->
-            <div class="mb-6 p-4 bg-blue-50 rounded-lg">
-                <label class="block text-sm font-medium mb-2">📅 날짜</label>
-                <input type="date" id="date" class="px-3 py-2 border rounded">
-            </div>
-
-            <!-- 체온 -->
-            <section class="mb-6 p-4 border rounded-lg">
-                <h2 class="text-xl font-bold mb-4 text-gray-800">🌡️ 체온</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-1">아침</label>
-                        <input type="number" step="0.1" id="temp_morning" class="w-full px-3 py-2 border rounded" placeholder="36.5">
-                        <span class="text-sm ml-2">°C</span>
+                <!-- 기록자와 시간 -->
+                <div class="mb-4 p-4 bg-blue-50 rounded">
+                    <div class="mb-3">
+                        <label class="block text-sm font-medium mb-1">기록자</label>
+                        <input type="text" id="recorder" class="w-full px-3 py-2 border rounded" placeholder="예: 딸, 아들, 본인">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium mb-1">점심</label>
-                        <input type="number" step="0.1" id="temp_noon" class="w-full px-3 py-2 border rounded" placeholder="36.5">
-                        <span class="text-sm ml-2">°C</span>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1">저녁</label>
-                        <input type="number" step="0.1" id="temp_evening" class="w-full px-3 py-2 border rounded" placeholder="36.5">
-                        <span class="text-sm ml-2">°C</span>
+                        <label class="block text-sm font-medium mb-1">날짜 및 시간</label>
+                        <input type="datetime-local" id="recordTime" class="w-full px-3 py-2 border rounded">
                     </div>
                 </div>
-                <p id="tempWarning" class="hidden mt-2 text-red-600 text-sm font-medium">⚠️ 38°C 이상 - 즉시 병원 연락!</p>
-            </section>
 
-            <!-- 혈압 & 맥박 -->
-            <section class="mb-6 p-4 border rounded-lg">
-                <h2 class="text-xl font-bold mb-4 text-gray-800">💓 혈압 & 맥박</h2>
-                <div class="mb-4">
-                    <h3 class="font-medium mb-2">아침</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- 체온 -->
+                <div class="mb-4 p-4 border rounded">
+                    <h3 class="font-bold mb-2">🌡️ 체온</h3>
+                    <div class="flex items-center gap-2">
+                        <input type="number" step="0.1" id="temperature" class="w-24 px-3 py-2 border rounded">
+                        <span class="text-sm">°C</span>
+                    </div>
+                    <p id="tempWarning" class="hidden mt-1 text-red-600 text-xs">⚠️ 38°C 이상 - 병원 연락!</p>
+                </div>
+
+                <!-- 혈압 & 맥박 -->
+                <div class="mb-4 p-4 border rounded">
+                    <h3 class="font-bold mb-2">💓 혈압 & 맥박</h3>
+                    <div class="grid grid-cols-3 gap-2">
                         <div>
-                            <label class="block text-sm mb-1">수축기</label>
-                            <input type="number" id="bp_systolic_am" class="w-full px-3 py-2 border rounded" placeholder="120">
+                            <label class="text-xs">수축기</label>
+                            <input type="number" id="bp_systolic" class="w-full px-2 py-1 border rounded text-sm" placeholder="120">
                         </div>
                         <div>
-                            <label class="block text-sm mb-1">이완기</label>
-                            <input type="number" id="bp_diastolic_am" class="w-full px-3 py-2 border rounded" placeholder="80">
+                            <label class="text-xs">이완기</label>
+                            <input type="number" id="bp_diastolic" class="w-full px-2 py-1 border rounded text-sm" placeholder="80">
                         </div>
                         <div>
-                            <label class="block text-sm mb-1">맥박 (회/분)</label>
-                            <input type="number" id="pulse_am" class="w-full px-3 py-2 border rounded" placeholder="70">
+                            <label class="text-xs">맥박</label>
+                            <input type="number" id="pulse" class="w-full px-2 py-1 border rounded text-sm" placeholder="70">
                         </div>
                     </div>
                 </div>
-                <div>
-                    <h3 class="font-medium mb-2">저녁</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label class="block text-sm mb-1">수축기</label>
-                            <input type="number" id="bp_systolic_pm" class="w-full px-3 py-2 border rounded" placeholder="120">
-                        </div>
-                        <div>
-                            <label class="block text-sm mb-1">이완기</label>
-                            <input type="number" id="bp_diastolic_pm" class="w-full px-3 py-2 border rounded" placeholder="80">
-                        </div>
-                        <div>
-                            <label class="block text-sm mb-1">맥박 (회/분)</label>
-                            <input type="number" id="pulse_pm" class="w-full px-3 py-2 border rounded" placeholder="70">
-                        </div>
-                    </div>
+
+                <!-- 산소포화도 -->
+                <div class="mb-4 p-4 border rounded">
+                    <h3 class="font-bold mb-2">🫁 산소포화도</h3>
+                    <input type="number" id="oxygen" class="w-24 px-2 py-1 border rounded text-sm" placeholder="98">
+                    <span class="text-sm ml-1">%</span>
+                    <p id="oxygenWarning" class="hidden mt-1 text-red-600 text-xs">⚠️ 95% 미만 - 병원 연락!</p>
                 </div>
-            </section>
 
-            <!-- 산소포화도 -->
-            <section class="mb-6 p-4 border rounded-lg">
-                <h2 class="text-xl font-bold mb-4 text-gray-800">🫁 산소포화도</h2>
-                <input type="number" id="oxygen" class="w-32 px-3 py-2 border rounded" placeholder="98">
-                <span class="ml-2">%</span>
-                <p id="oxygenWarning" class="hidden mt-2 text-red-600 text-sm font-medium">⚠️ 95% 미만 - 병원 연락!</p>
-            </section>
-
-            <!-- 식사 & 수분 -->
-            <section class="mb-6 p-4 border rounded-lg">
-                <h2 class="text-xl font-bold mb-4 text-gray-800">🍚 식사 & 수분</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-1">아침</label>
-                        <select id="breakfast" class="w-full px-3 py-2 border rounded">
-                            <option>전부</option>
-                            <option>반 이상</option>
-                            <option>반 이하</option>
-                            <option>거의 못 먹음</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1">점심</label>
-                        <select id="lunch" class="w-full px-3 py-2 border rounded">
-                            <option>전부</option>
-                            <option>반 이상</option>
-                            <option>반 이하</option>
-                            <option>거의 못 먹음</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1">저녁</label>
-                        <select id="dinner" class="w-full px-3 py-2 border rounded">
-                            <option>전부</option>
-                            <option>반 이상</option>
-                            <option>반 이하</option>
-                            <option>거의 못 먹음</option>
-                        </select>
-                    </div>
+                <!-- 식사 -->
+                <div class="mb-4 p-4 border rounded">
+                    <h3 class="font-bold mb-2">🍚 식사</h3>
+                    <select id="meal" class="w-full px-3 py-2 border rounded">
+                        <option>전부</option>
+                        <option>반 이상</option>
+                        <option>반 이하</option>
+                        <option>거의 못 먹음</option>
+                    </select>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1">수분 섭취 (컵)</label>
-                    <input type="number" id="water_cups" class="w-32 px-3 py-2 border rounded" placeholder="6-8">
-                    <span class="ml-2 text-sm text-gray-600">목표: 6-8컵</span>
-                </div>
-            </section>
 
-            <!-- 증상 체크 -->
-            <section class="mb-6 p-4 border rounded-lg">
-                <h2 class="text-xl font-bold mb-4 text-gray-800">💊 증상 체크</h2>
-                <div class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium mb-1">메스꺼움</label>
-                            <select id="nausea" class="w-full px-3 py-2 border rounded">
-                                <option>없음</option>
-                                <option>약함</option>
-                                <option>중간</option>
-                                <option>심함</option>
-                            </select>
+                <!-- 증상 체크 -->
+                <div class="mb-4 p-4 border rounded">
+                    <h3 class="font-bold mb-2">💊 증상 체크</h3>
+                    <div class="space-y-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs">메스꺼움</label>
+                                <select id="nausea" class="w-full px-2 py-1 border rounded text-sm">
+                                    <option>없음</option>
+                                    <option>약함</option>
+                                    <option>중간</option>
+                                    <option>심함</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs">구토 횟수</label>
+                                <input type="number" id="vomit_count" class="w-full px-2 py-1 border rounded text-sm" value="0">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs">설사</label>
+                                <select id="diarrhea" class="w-full px-2 py-1 border rounded text-sm">
+                                    <option>없음</option>
+                                    <option>1-2회</option>
+                                    <option>3-4회</option>
+                                    <option>5회 이상</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs">통증</label>
+                                <select id="pain" class="w-full px-2 py-1 border rounded text-sm">
+                                    <option>없음</option>
+                                    <option>약함</option>
+                                    <option>중간</option>
+                                    <option>심함</option>
+                                </select>
+                            </div>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium mb-1">구토 횟수</label>
-                            <input type="number" id="vomit_count" class="w-full px-3 py-2 border rounded" value="0">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium mb-1">설사</label>
-                            <select id="diarrhea" class="w-full px-3 py-2 border rounded">
-                                <option>없음</option>
-                                <option>1-2회</option>
-                                <option>3-4회</option>
-                                <option>5회 이상</option>
-                            </select>
-                            <p id="diarrheaWarning" class="hidden mt-1 text-red-600 text-sm">⚠️ 병원 연락 필요</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-1">변비</label>
-                            <select id="constipation" class="w-full px-3 py-2 border rounded">
-                                <option>정상</option>
-                                <option>2일째</option>
-                                <option>3일 이상</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium mb-1">소변 색깔</label>
-                            <select id="urine_color" class="w-full px-3 py-2 border rounded">
-                                <option>연한 노란색</option>
-                                <option>진한 노란색</option>
-                                <option>갈색</option>
-                                <option>붉은색</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-1">소변 양</label>
-                            <select id="urine_amount" class="w-full px-3 py-2 border rounded">
-                                <option>정상</option>
-                                <option>적음</option>
-                                <option>매우 적음</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium mb-1">입안 상태</label>
-                            <select id="mouth" class="w-full px-3 py-2 border rounded">
-                                <option>정상</option>
-                                <option>따끔거림</option>
-                                <option>염증/궤양</option>
-                                <option>통증으로 식사 어려움</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-1">출혈</label>
-                            <select id="bleeding" class="w-full px-3 py-2 border rounded">
-                                <option>없음</option>
-                                <option>코피</option>
-                                <option>잇몸출혈</option>
-                                <option>멍</option>
-                                <option>기타</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium mb-1">호흡</label>
-                            <select id="breathing" class="w-full px-3 py-2 border rounded">
+                            <label class="text-xs">호흡</label>
+                            <select id="breathing" class="w-full px-2 py-1 border rounded text-sm">
                                 <option>정상</option>
                                 <option>약간 답답함</option>
                                 <option>숨참</option>
                                 <option>심한 호흡곤란</option>
                             </select>
-                            <p id="breathingWarning" class="hidden mt-1 text-red-600 text-sm">⚠️ 즉시 병원 연락!</p>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium mb-1">통증</label>
-                            <select id="pain" class="w-full px-3 py-2 border rounded">
-                                <option>없음</option>
-                                <option>약함</option>
-                                <option>중간</option>
-                                <option>심함</option>
+                            <label class="text-xs">전체 컨디션</label>
+                            <select id="condition" class="w-full px-2 py-1 border rounded text-sm">
+                                <option>괜찮음</option>
+                                <option>피곤함</option>
+                                <option>매우 피곤함</option>
+                                <option>어지러움</option>
+                                <option>의식 흐릿함</option>
                             </select>
                         </div>
                     </div>
-
-                    <div id="painLocationDiv" class="hidden">
-                        <label class="block text-sm font-medium mb-1">통증 부위</label>
-                        <input type="text" id="pain_location" class="w-full px-3 py-2 border rounded" placeholder="예: 배, 머리, 가슴 등">
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium mb-1">전체 컨디션</label>
-                        <select id="condition" class="w-full px-3 py-2 border rounded">
-                            <option>괜찮음</option>
-                            <option>피곤함</option>
-                            <option>매우 피곤함</option>
-                            <option>어지러움</option>
-                            <option>의식 흐릿함</option>
-                        </select>
-                    </div>
                 </div>
-            </section>
 
-            <!-- 특이사항 -->
-            <section class="mb-6 p-4 border rounded-lg">
-                <h2 class="text-xl font-bold mb-4 text-gray-800">📝 오늘의 특이사항</h2>
-                <textarea id="notes" class="w-full px-3 py-2 border rounded" rows="4" placeholder="특이사항이나 추가로 기록할 내용을 입력하세요..."></textarea>
-            </section>
-
-            <!-- 긴급 연락처 -->
-            <section class="mb-6 p-4 border rounded-lg bg-red-50">
-                <h2 class="text-xl font-bold mb-4 text-gray-800">📞 긴급 연락처</h2>
-                <div class="space-y-3">
-                    <div>
-                        <label class="block text-sm font-medium mb-1">담당 병원</label>
-                        <input type="text" id="hospital" class="w-full px-3 py-2 border rounded">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1">전화번호</label>
-                        <input type="tel" id="phone" class="w-full px-3 py-2 border rounded">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1">응급실</label>
-                        <input type="tel" id="emergency" class="w-full px-3 py-2 border rounded">
-                    </div>
+                <!-- 특이사항 -->
+                <div class="mb-4 p-4 border rounded">
+                    <h3 class="font-bold mb-2">📝 특이사항</h3>
+                    <textarea id="notes" class="w-full px-2 py-1 border rounded text-sm" rows="3" placeholder="특이사항 입력..."></textarea>
                 </div>
-            </section>
 
-            <!-- 저장 버튼 -->
-            <div class="flex justify-center">
-                <button onclick="saveRecord()" class="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-lg font-medium">
+                <!-- 저장 버튼 -->
+                <button onclick="saveRecord()" class="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
                     💾 저장하기
                 </button>
+            </div>
+
+            <!-- 오른쪽: 기록 테이블 -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">기록 히스토리</h2>
+                    <button onclick="downloadExcel()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
+                        📊 엑셀 다운로드
+                    </button>
+                </div>
+                
+                <div class="table-container">
+                    <table class="w-full border-collapse">
+                        <thead class="bg-gray-100 sticky top-0">
+                            <tr>
+                                <th class="text-xs">시간</th>
+                                <th class="text-xs">기록자</th>
+                                <th class="text-xs">체온</th>
+                                <th class="text-xs">혈압</th>
+                                <th class="text-xs">맥박</th>
+                                <th class="text-xs">산소</th>
+                                <th class="text-xs">식사</th>
+                                <th class="text-xs">증상</th>
+                                <th class="text-xs">특이사항</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsTable">
+                            <tr><td colspan="9" class="text-center text-gray-500 py-4">로딩 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        // 오늘 날짜 설정
-        document.getElementById('date').valueAsDate = new Date();
+        // Supabase 초기화
+        const SUPABASE_URL = 'https://dbuhfrlflvzqvrvsdayk.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRidWhmcmxmbHZ6cXZydnNkYXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNTE3MjksImV4cCI6MjA3NDkyNzcyOX0.uWzEnPTWbSNizJ-YCPBrRaCOBLCmEKYRczZI-EM3ghU';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // 로컬 스토리지에서 기록 불러오기
-        function loadRecords() {
-            const saved = localStorage.getItem('health_records');
-            return saved ? JSON.parse(saved) : [];
-        }
+        // 현재 시간 설정
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('recordTime').value = now.toISOString().slice(0, 16);
 
-        // 위험 상황 체크
-        function checkUrgent() {
-            const temps = [
-                parseFloat(document.getElementById('temp_morning').value) || 0,
-                parseFloat(document.getElementById('temp_noon').value) || 0,
-                parseFloat(document.getElementById('temp_evening').value) || 0
-            ];
-            const highTemp = temps.some(t => t >= 38);
+        // 위험 체크
+        function checkWarnings() {
+            const temp = parseFloat(document.getElementById('temperature').value) || 0;
             const lowOxygen = parseFloat(document.getElementById('oxygen').value) < 95;
-            const severeDiarrhea = document.getElementById('diarrhea').value === '5회 이상';
-            const breathingIssue = document.getElementById('breathing').value === '심한 호흡곤란';
 
-            // 경고 표시
-            document.getElementById('tempWarning').classList.toggle('hidden', !highTemp);
+            document.getElementById('tempWarning').classList.toggle('hidden', temp < 38);
             document.getElementById('oxygenWarning').classList.toggle('hidden', !lowOxygen);
-            document.getElementById('diarrheaWarning').classList.toggle('hidden', !severeDiarrhea);
-            document.getElementById('breathingWarning').classList.toggle('hidden', !breathingIssue);
-            document.getElementById('urgentWarning').classList.toggle('hidden', !(highTemp || lowOxygen || severeDiarrhea || breathingIssue));
         }
 
-        // 통증 부위 입력 표시/숨김
-        document.getElementById('pain').addEventListener('change', function() {
-            document.getElementById('painLocationDiv').classList.toggle('hidden', this.value === '없음');
-        });
-
-        // 입력값 변경 시 체크
-        ['temp_morning', 'temp_noon', 'temp_evening', 'oxygen', 'diarrhea', 'breathing'].forEach(id => {
-            document.getElementById(id).addEventListener('input', checkUrgent);
-            document.getElementById(id).addEventListener('change', checkUrgent);
+        ['temperature', 'oxygen'].forEach(id => {
+            document.getElementById(id).addEventListener('input', checkWarnings);
         });
 
         // 기록 저장
-        function saveRecord() {
-            const formData = {
-                date: document.getElementById('date').value,
-                temp_morning: document.getElementById('temp_morning').value,
-                temp_noon: document.getElementById('temp_noon').value,
-                temp_evening: document.getElementById('temp_evening').value,
-                bp_systolic_am: document.getElementById('bp_systolic_am').value,
-                bp_diastolic_am: document.getElementById('bp_diastolic_am').value,
-                pulse_am: document.getElementById('pulse_am').value,
-                bp_systolic_pm: document.getElementById('bp_systolic_pm').value,
-                bp_diastolic_pm: document.getElementById('bp_diastolic_pm').value,
-                pulse_pm: document.getElementById('pulse_pm').value,
-                oxygen: document.getElementById('oxygen').value,
-                breakfast: document.getElementById('breakfast').value,
-                lunch: document.getElementById('lunch').value,
-                dinner: document.getElementById('dinner').value,
-                water_cups: document.getElementById('water_cups').value,
+        async function saveRecord() {
+            const data = {
+                recorder: document.getElementById('recorder').value || '미입력',
+                record_time: document.getElementById('recordTime').value,
+                temperature: document.getElementById('temperature').value || null,
+                bp_systolic: document.getElementById('bp_systolic').value || null,
+                bp_diastolic: document.getElementById('bp_diastolic').value || null,
+                pulse: document.getElementById('pulse').value || null,
+                oxygen: document.getElementById('oxygen').value || null,
+                meal: document.getElementById('meal').value,
                 nausea: document.getElementById('nausea').value,
-                vomit_count: document.getElementById('vomit_count').value,
+                vomit_count: document.getElementById('vomit_count').value || 0,
                 diarrhea: document.getElementById('diarrhea').value,
-                constipation: document.getElementById('constipation').value,
-                urine_color: document.getElementById('urine_color').value,
-                urine_amount: document.getElementById('urine_amount').value,
-                mouth: document.getElementById('mouth').value,
-                bleeding: document.getElementById('bleeding').value,
-                breathing: document.getElementById('breathing').value,
                 pain: document.getElementById('pain').value,
-                pain_location: document.getElementById('pain_location').value,
+                breathing: document.getElementById('breathing').value,
                 condition: document.getElementById('condition').value,
-                notes: document.getElementById('notes').value,
-                hospital: document.getElementById('hospital').value,
-                phone: document.getElementById('phone').value,
-                emergency: document.getElementById('emergency').value,
-                timestamp: new Date().toISOString()
+                notes: document.getElementById('notes').value || null
             };
 
-            const records = loadRecords();
-            records.unshift(formData);
-            localStorage.setItem('health_records', JSON.stringify(records));
+            const { error } = await supabase
+                .from('health_records')
+                .insert([data]);
 
-            alert('저장되었습니다!');
-        }
-
-        // 히스토리 토글
-        function toggleHistory() {
-            const formView = document.getElementById('formView');
-            const historyView = document.getElementById('historyView');
-            const toggleBtn = document.getElementById('toggleBtn');
-
-            if (formView.style.display === 'none') {
-                formView.style.display = 'block';
-                historyView.classList.add('hidden');
-                toggleBtn.textContent = '기록 보기';
+            if (error) {
+                alert('저장 실패: ' + error.message);
             } else {
-                formView.style.display = 'none';
-                historyView.classList.remove('hidden');
-                toggleBtn.textContent = '새 기록 작성';
-                displayHistory();
+                alert('저장되었습니다!');
+                loadRecords();
+                // 폼 초기화
+                document.getElementById('notes').value = '';
             }
         }
 
-        // 히스토리 표시
-        function displayHistory() {
-            const records = loadRecords();
-            const listDiv = document.getElementById('recordsList');
+        // 기록 불러오기
+        async function loadRecords() {
+            const { data, error } = await supabase
+                .from('health_records')
+                .select('*')
+                .order('record_time', { ascending: false })
+                .limit(50);
 
-            if (records.length === 0) {
-                listDiv.innerHTML = '<p class="text-gray-500 text-center py-8">아직 기록이 없습니다.</p>';
+            if (error) {
+                document.getElementById('recordsTable').innerHTML = 
+                    '<tr><td colspan="9" class="text-center text-red-500">데이터 로딩 실패</td></tr>';
                 return;
             }
 
-            let html = '<div class="space-y-4">';
-            records.forEach((record, idx) => {
-                const conditionClass = 
-                    record.condition === '괜찮음' ? 'bg-green-100 text-green-800' :
-                    record.condition === '피곤함' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800';
+            if (data.length === 0) {
+                document.getElementById('recordsTable').innerHTML = 
+                    '<tr><td colspan="9" class="text-center text-gray-500">아직 기록이 없습니다</td></tr>';
+                return;
+            }
 
-                const temps = [record.temp_morning, record.temp_noon, record.temp_evening]
-                    .filter(t => t).join(', ');
+            let html = '';
+            data.forEach(record => {
+                const time = new Date(record.record_time).toLocaleString('ko-KR', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                const bp = record.bp_systolic && record.bp_diastolic 
+                    ? `${record.bp_systolic}/${record.bp_diastolic}` 
+                    : '-';
+                const symptoms = [
+                    record.nausea !== '없음' ? `메:${record.nausea}` : '',
+                    record.diarrhea !== '없음' ? `설:${record.diarrhea}` : '',
+                    record.pain !== '없음' ? `통:${record.pain}` : ''
+                ].filter(s => s).join(', ') || '없음';
 
                 html += `
-                    <div class="border rounded-lg p-4 hover:shadow-lg transition-shadow">
-                        <div class="flex justify-between items-start mb-2">
-                            <h3 class="font-bold text-lg">${record.date}</h3>
-                            <span class="px-3 py-1 rounded text-sm ${conditionClass}">${record.condition}</span>
-                        </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                            ${temps ? `<div><span class="text-gray-600">체온:</span> <span class="font-medium">${temps}°C</span></div>` : ''}
-                            ${record.oxygen ? `<div><span class="text-gray-600">산소:</span> <span class="font-medium">${record.oxygen}%</span></div>` : ''}
-                            <div><span class="text-gray-600">식사:</span> ${record.breakfast}, ${record.lunch}, ${record.dinner}</div>
-                            ${record.water_cups ? `<div><span class="text-gray-600">수분:</span> ${record.water_cups}컵</div>` : ''}
-                        </div>
-                        ${record.notes ? `<div class="mt-2 pt-2 border-t"><p class="text-sm text-gray-700">${record.notes}</p></div>` : ''}
-                    </div>
+                    <tr class="hover:bg-gray-50">
+                        <td class="text-xs">${time}</td>
+                        <td class="text-xs">${record.recorder}</td>
+                        <td class="text-xs">${record.temperature || '-'}</td>
+                        <td class="text-xs">${bp}</td>
+                        <td class="text-xs">${record.pulse || '-'}</td>
+                        <td class="text-xs">${record.oxygen || '-'}</td>
+                        <td class="text-xs">${record.meal || '-'}</td>
+                        <td class="text-xs">${symptoms}</td>
+                        <td class="text-xs max-w-xs truncate" title="${record.notes || ''}">${record.notes || '-'}</td>
+                    </tr>
                 `;
             });
-            html += '</div>';
-            listDiv.innerHTML = html;
+
+            document.getElementById('recordsTable').innerHTML = html;
         }
+
+        // 엑셀 다운로드
+        async function downloadExcel() {
+            const { data, error } = await supabase
+                .from('health_records')
+                .select('*')
+                .order('record_time', { ascending: false });
+
+            if (error || !data) {
+                alert('데이터를 가져올 수 없습니다.');
+                return;
+            }
+
+            // 엑셀용 데이터 변환
+            const excelData = data.map(record => ({
+                '날짜시간': new Date(record.record_time).toLocaleString('ko-KR'),
+                '기록자': record.recorder,
+                '체온': record.temperature,
+                '혈압_수축기': record.bp_systolic,
+                '혈압_이완기': record.bp_diastolic,
+                '맥박': record.pulse,
+                '산소포화도': record.oxygen,
+                '식사': record.meal,
+                '메스꺼움': record.nausea,
+                '구토횟수': record.vomit_count,
+                '설사': record.diarrhea,
+                '통증': record.pain,
+                '호흡': record.breathing,
+                '전체컨디션': record.condition,
+                '특이사항': record.notes
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(excelData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '건강기록');
+            
+            const fileName = `건강기록_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        // 페이지 로드 시 기록 불러오기
+        loadRecords();
+
+        // 10초마다 자동 새로고침
+        setInterval(loadRecords, 10000);
     </script>
 </body>
 </html>
